@@ -1,0 +1,23 @@
+const tg = window.Telegram?.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+const devID = new URLSearchParams(location.search).get('user') || localStorage.getItem('nab-user') || String(Math.floor(100000000 + Math.random() * 899999999));
+localStorage.setItem('nab-user', devID);
+const userID = tg?.initDataUnsafe?.user?.id || devID;
+const headers = {'Content-Type': 'application/json', 'X-Telegram-User-ID': userID};
+let chosenTarget, cooldownTimer;
+const $ = selector => document.querySelector(selector);
+function toast(message) { const e = $('#toast'); e.textContent = message; e.classList.add('show'); setTimeout(() => e.classList.remove('show'), 2800); }
+async function api(path, options = {}) { const res = await fetch('/api/v1' + path, {...options, headers: {...headers, ...options.headers}}); const body = await res.json().catch(() => ({error: 'Сервер вернул непонятный ответ'})); if (!res.ok) { const err = new Error(body.error || 'Ошибка'); err.body = body; throw err; } return body; }
+function escapeHTML(value = '') { const el = document.createElement('div'); el.textContent = value; return el.innerHTML; }
+function initials(name) { return [...name.trim()].slice(0, 2).join('').toUpperCase() || '?'; }
+function render(items) { const root = $('#targets'); if (!items.length) { root.innerHTML = '<p class="empty">Никого не найдено. Будь первым.</p>'; return; } root.innerHTML = items.map((t, i) => `<article class="target"><div class="avatar">${t.photoUrl ? `<img class="avatar" src="${escapeHTML(t.photoUrl)}" alt="">` : initials(t.name)}</div><div class="target-info"><h4>#${i + 1} ${escapeHTML(t.name)}</h4><p>${escapeHTML(t.description || 'Без объяснений. Так вышло.')}</p></div><div class="target-right"><span class="count">${Number(t.bottleCount).toLocaleString('ru-RU')} 🧴</span><button class="secondary" data-id="${t.id}" data-name="${escapeHTML(t.name)}">НАБУТЫЛИТЬ</button></div></article>`).join(''); root.querySelectorAll('button[data-id]').forEach(button => { button.onclick = () => openNab(button.dataset.id, button.dataset.name); }); }
+async function loadTargets(query = '') { try { render(await api(query ? '/targets/search?q=' + encodeURIComponent(query) : '/targets?limit=50')); } catch (e) { toast(e.message); } }
+async function loadBalance() { try { const me = await api('/me'); $('#balance').textContent = Number(me.balance).toLocaleString('ru-RU') + ' 🧴'; } catch (_) {} }
+function setCooldown(seconds) { clearInterval(cooldownTimer); const button = $('#claimActive'); const draw = () => { button.disabled = seconds > 0; button.textContent = seconds > 0 ? `ПОДОЖДИ ${seconds} СЕК.` : 'ЗАБРАТЬ +1 🧴'; $('#cooldown').textContent = seconds > 0 ? 'Бутылка набирает силу…' : ''; if (seconds-- <= 0) clearInterval(cooldownTimer); }; draw(); cooldownTimer = setInterval(draw, 1000); }
+$('#claimActive').onclick = async () => { try { const value = await api('/me/claim/active', {method: 'POST'}); $('#balance').textContent = Number(value.balance).toLocaleString('ru-RU') + ' 🧴'; setCooldown(40); toast('+1 бутылка в твоём кармане'); } catch (e) { if (e.body?.retryAfterSeconds) setCooldown(e.body.retryAfterSeconds); toast(e.message); } };
+$('#claimPassive').onclick = async () => { try { const value = await api('/me/claim/passive', {method: 'POST'}); $('#balance').textContent = Number(value.balance).toLocaleString('ru-RU') + ' 🧴'; toast(value.bottlesAwarded ? `Забрано: ${value.bottlesAwarded} 🧴` : 'Пока нечего забирать'); } catch (e) { toast(e.message); } };
+$('#targetForm').onsubmit = async event => { event.preventDefault(); try { await api('/targets', {method: 'POST', body: JSON.stringify({name: $('#targetName').value, photoUrl: $('#targetPhoto').value, description: $('#targetDescription').value})}); event.target.reset(); toast('Новая цель уже в рейтинге'); loadTargets(); } catch (e) { toast(e.message); } };
+let searchTimer; $('#search').oninput = event => { clearTimeout(searchTimer); searchTimer = setTimeout(() => loadTargets(event.target.value.trim()), 300); };
+function openNab(id, name) { chosenTarget = id; $('#dialogName').textContent = 'Набутылить ' + name; $('#comment').value = ''; $('#nabutilitDialog').showModal(); }
+$('#confirmNabutilit').onclick = async event => { event.preventDefault(); const comment = $('#comment').value.trim(); if (!comment) { toast('Напиши комментарий'); return; } try { await api('/targets/' + chosenTarget + '/nabutilit', {method: 'POST', body: JSON.stringify({comment})}); $('#nabutilitDialog').close(); toast('Цель набутылена ×1000'); loadBalance(); loadTargets(); } catch (e) { toast(e.message); } };
+loadBalance(); loadTargets();

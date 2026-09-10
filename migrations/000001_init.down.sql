@@ -1,0 +1,4 @@
+DROP TABLE IF EXISTS payment_events;
+DROP TABLE IF EXISTS nabutilations;
+DROP TABLE IF EXISTS targets;
+DROP TABLE IF EXISTS players;

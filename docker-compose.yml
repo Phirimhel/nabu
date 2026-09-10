@@ -1,0 +1,52 @@
+services:
+  api:
+    build: .
+    env_file: .env
+    ports: ["8079:8079"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+  migrate:
+    image: postgres:16-alpine
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/nabutilivanie?sslmode=disable
+    volumes:
+      - ./migrations:/migrations:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        psql "$$DATABASE_URL" -v ON_ERROR_STOP=1 -c 'CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW())'
+        if ! psql "$$DATABASE_URL" -tAc "SELECT 1 FROM schema_migrations WHERE version = '000001'" | grep -qx 1; then
+          psql "$$DATABASE_URL" -v ON_ERROR_STOP=1 -f /migrations/000001_init.up.sql
+          psql "$$DATABASE_URL" -v ON_ERROR_STOP=1 -c "INSERT INTO schema_migrations(version) VALUES ('000001')"
+        fi
+    restart: "no"
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: nabutilivanie
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes: ["postgres_data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d nabutilivanie"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+volumes:
+  postgres_data:
