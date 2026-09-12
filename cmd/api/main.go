@@ -67,7 +67,7 @@ func env(k, fallback string) string {
 	}
 	return fallback
 }
-func redisAddr(raw string) string { // Redis URL parsing is deliberately kept in the HTTP package's constructor-free config.
+func redisAddr(raw string) string { 
 	if len(raw) > len("redis://") && raw[:len("redis://")] == "redis://" {
 		raw = raw[len("redis://"):]
 		for i, c := range raw {
